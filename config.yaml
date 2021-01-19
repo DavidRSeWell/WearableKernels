@@ -1,0 +1,22 @@
+
+
+DATA:
+  data_path: /Users/davidsewell/MLData/
+  load_watch:
+    accel: true
+    gyro: false
+  load_phone:
+    accel: false
+    gyro: false
+  load_all: false
+  load_subjects: [1600]
+
+TRANSFORM:
+  features: []
+
+MODEL:
+  model_name:
+    params:
+
+OUTPUT:
+  output_path:
