@@ -7,11 +7,53 @@ import typing
 import abc
 
 import numpy as np
+import pandas as pd
 from scipy import signal
 from scipy.ndimage.filters import maximum_filter1d
 
 SignalLike = typing.Union[list, tuple, np.array]
 
+
+def assign_activity(times, df):
+    """
+    Helper function to assign the activity of a subject based on
+    a list times using the original data
+    :param times: list of times like from a downsampled data set
+    :param df: orignal data
+    :return:
+    """
+    activities = []
+    for i in range(len(times) - 1):
+        min_ = times[i]
+        max_ = times[i + 1]
+        set_activity = list(set(df[(df.index >= min_) & (df.index <= max_)]['activity_code']))
+        if len(set_activity) > 1:
+            return
+        elif len(set_activity) == 0:
+            return
+        else:
+            activities.append(set_activity[0])
+
+    set_activity = list(set(df[(df.index >= times[-1])]['activity_code']))
+    if len(set_activity) > 1:
+        print(set_activity)
+        return
+    elif len(set_activity) == 0:
+        return
+    activities.append(set_activity[0])
+    return activities
+
+def _downsample_mean(data: pd.DataFrame,ds_rate: str = "5S") -> pd.DataFrame:
+    """
+    :param data: (N,d) data frame of raw accel / gyro data
+    :param ds_rate: downsample rate
+    :return: dataframe of (M,d) where M < N
+    """
+    data_down = data.resample(ds_rate).mean()
+    data_down = data_down.dropna()
+    data_down['activity'] = assign_activity(data_down.index, data)
+    del data
+    return data_down
 
 def _magnitude(data: np.array) -> np.array:
     """ get magnitude of BEAT-PD measurement array

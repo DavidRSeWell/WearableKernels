@@ -12,7 +12,7 @@ DATA:
   load_subjects: [1600]
 
 TRANSFORM:
-  features: []
+  features: [] # put features in order of desired application
 
 MODEL:
   model_name:
