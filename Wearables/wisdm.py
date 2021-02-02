@@ -65,7 +65,6 @@ class WisdmData:
 
         return (watch_accel_data,watch_gyro_data,phone_accel_data,phone_gyro_data)
 
-
     def load_device_data(self,device_type:str,subjects: List) -> tuple:
 
         print(f"Loading data for {device_type}")

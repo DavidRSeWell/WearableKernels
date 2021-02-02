@@ -28,11 +28,12 @@ def run(config):
 
     watch_accel_data['datetime'] = pd.to_datetime(watch_accel_data['unix'])
     watch_accel_data = watch_accel_data.drop('unix', axis=1)
-    watch_accel_data = watch_accel_data.set_index("datetime")
+    watch_accel_data = watch_accel_data.set_index(['datetime'])
 
+    # Perform Transformation
     trans_data = _downsample_mean(watch_accel_data)
 
-    X, y = trans_data[['x', 'y', 'z','activity']], trans_data['activity'].to_numpy()
+    X, y = trans_data[['x', 'y', 'z','subject','activity']], trans_data[['subject','activity']]
 
     model = W2VKernel(n_clusters=30)
 

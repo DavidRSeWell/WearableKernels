@@ -47,10 +47,10 @@ class W2VKernel:
     def convert_cluster_word(self,sentences: List,cluster_to_word:dict):
         new_sentences = []
         for s in sentences:
-            sn = ""
+            sn = ''
             for w in s.split():
                 # print(int(w))
-                sn += cluster_to_word[int(w)] + " "
+                sn += cluster_to_word[int(w)] + ' '
             new_sentences.append(sn.strip())
         return new_sentences
 
@@ -59,7 +59,7 @@ class W2VKernel:
         Create a dictionary of "word: vector"
         :return:
         """
-        dostoy = "Above all dont lie to yourself. The man who lies to himself and listens to his own lie comes to a point that he cannot distinguish the truth within him, or around him, and so loses all respect for himself and for others. And having no respect he ceases to love"
+        dostoy = 'Above all dont lie to yourself. The man who lies to himself and listens to his own lie comes to a point that he cannot distinguish the truth within him, or around him, and so loses all respect for himself and for others. And having no respect he ceases to love'
 
         train_text = self.pd_to_sentence(data, self.targets)
 
@@ -70,7 +70,7 @@ class W2VKernel:
         vocab = list(set(text.split()))
 
         def clean_word(w):
-            return w.lower().strip().replace(".", "").replace(",", "")
+            return w.lower().strip().replace('.', '').replace(',', '')
 
         dostoy_vocab = list(set([clean_word(w) for w in dostoy.split()]))
 
@@ -113,78 +113,125 @@ class W2VKernel:
 
     def run(self,X,y):
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2,stratify=X['subject'])
 
+        print("Train and test shape")
         print(X_train.shape)
         print(X_test.shape)
 
-        #TRAIN
+        #TRAIN K means
 
         kmeans = self.run_kmeans(X_train[['x','y','z']].to_numpy())
 
-        y_train = self.convert_binary_class(y_train, self.targets)
-
         X_train['cluster'] = kmeans.labels_
 
+        # Create Sentences from clusters
         sentences, cluster_to_word = self.create_word_sentences(X_train)
 
+        # run w2v
         w2v_model = self.run_w2v(sentences)
 
+        # extract features
         X_train['c_feature'] = X_train['cluster'].apply(lambda x: self.add_cluster_features(w2v_model, x,cluster_to_word))
 
-        X_train['target'] = y_train
+        #X_train['target'] = y_train
 
-        features = X_train['c_feature'].to_numpy()
+        # LR base model
+        subjects = set(X['subject'].tolist())
+        lr_models = {f'model_{id}':None for id in subjects}
+        vornoi_models = {f'model_{id}':() for id in subjects}
 
-        X_features = np.array([f for f in features])
+        lr_scores = []
+        vornoi_scores = []
+        for id in subjects:
 
-        feature_lr = LogisticRegression()
+            print(f'Training for subject = {id}')
 
-        feature_lr.fit(X_features,y_train)
+            X_id, y_id = X_train[X_train['subject'] == id], y_train[y_train['subject'] == id]['activity']
 
-        print("Logistic in sample score")
-        print(feature_lr.score(X_features,y_train))
+            y_id = self.convert_binary_class(y_id, self.targets)
 
-        K = lambda x, xi: np.dot(x, xi)
+            features = X_id['c_feature'].to_numpy()
 
-        b,xp,xn = self.train_volnoi(X_features,y_train,K)
+            X_features = np.array([f for f in features])
 
-        train_predict = self.classify_feats_kernel(X_features,b,xp,xn,K)
+            feature_lr = LogisticRegression()
 
-        train_score = self.mean_score(train_predict,y_train)
+            feature_lr.fit(X_features,y_id)
 
-        print("Volnoi in sample score")
-        print(train_score)
+            print('Logistic in sample score')
+            score = feature_lr.score(X_features,y_id)
+            print(score)
+            lr_scores.append(score)
+            lr_models[f'model_{id}'] = feature_lr
+
+            K = lambda x, xi: np.dot(x, xi)
+
+            b,xp,xn = self.train_volnoi(X_features,y_id,K)
+
+            train_predict = self.classify_feats_kernel(X_features,b,xp,xn,K)
+
+            train_score = self.mean_score(train_predict,y_id)
+            print('Volnoi in sample score')
+            print(train_score)
+            vornoi_scores.append(train_score)
+
+            vornoi_models[f'model_{id}'] = (b,xp,xn,K)
+
+        print("Mean Train scores")
+        print("LR")
+        print(sum(lr_scores) / len(lr_scores))
+        print("Vornoi")
+        print(sum(vornoi_scores) / len(vornoi_scores))
 
         #TEST
 
-        y_test = self.convert_binary_class(y_test, self.targets)
 
-        X_test['cluster'] = kmeans.predict(X_test[["x","y","x"]].to_numpy())
+        X_test['cluster'] = kmeans.predict(X_test[['x', 'y', 'x']].to_numpy())
 
         sentences, cluster_to_word = self.create_word_sentences(X_test)
 
         w2v_model = self.run_w2v(sentences)
 
-        X_test['c_feature'] = X_test['cluster'].apply(lambda x: self.add_cluster_features(w2v_model, x, cluster_to_word))
+        X_test['c_feature'] = X_test['cluster'].apply(
+            lambda x: self.add_cluster_features(w2v_model, x, cluster_to_word))
 
-        X_test['target'] = y_test
+        #X_test['target'] = y_test
 
-        features = X_test['c_feature'].to_numpy()
+        lr_test_scores = []
+        vornoi_test_scores = []
 
-        X_features = np.array([f for f in features])
+        for id in subjects:
 
-        print("Logistic in sample score")
-        print(feature_lr.score(X_features, y_test))
+            X_id, y_id = X_test[X_test['subject'] == id], y_test[y_test['subject'] == id]['activity']
 
-        test_predict = self.classify_feats_kernel(X_features, b, xp, xn, K)
+            y_id = self.convert_binary_class(y_id, self.targets)
 
-        test_score = self.mean_score(test_predict, y_test)
+            features = X_id['c_feature'].to_numpy()
 
-        print("Volnoi in sample score")
-        print(test_score)
+            X_features = np.array([f for f in features])
 
+            feature_lr = lr_models[f'model_{id}']
+            print('Logistic in sample score')
+            lr_score = feature_lr.score(X_features, y_id)
+            lr_test_scores.append(lr_score)
+            print(lr_score)
 
+            b,xp,xn,K = vornoi_models[f'model_{id}']
+
+            test_predict = self.classify_feats_kernel(X_features, b, xp, xn, K)
+
+            test_score = self.mean_score(test_predict, y_id)
+
+            print('Volnoi in sample score')
+            print(test_score)
+            vornoi_test_scores.append(test_score)
+
+        print("Mean Test scores")
+        print("LR")
+        print(sum(lr_test_scores) / len(lr_test_scores))
+        print("Vornoi")
+        print(sum(vornoi_test_scores) / len(vornoi_test_scores))
 
     def train_volnoi(self,X,y,K):
 

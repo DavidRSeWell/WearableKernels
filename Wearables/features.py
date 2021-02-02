@@ -14,27 +14,28 @@ from scipy.ndimage.filters import maximum_filter1d
 SignalLike = typing.Union[list, tuple, np.array]
 
 
-def assign_activity(times, df):
+def assign_activity(indexes, df):
     """
     Helper function to assign the activity of a subject based on
     a list times using the original data
-    :param times: list of times like from a downsampled data set
+    :param indexes: index from a downsampled data set
     :param df: orignal data
     :return:
     """
     activities = []
-    for i in range(len(times) - 1):
-        min_ = times[i]
-        max_ = times[i + 1]
-        set_activity = list(set(df[(df.index >= min_) & (df.index <= max_)]['activity_code']))
+    for i in range(len(indexes) - 1):
+        subject = indexes[i][0]
+        min_ = indexes[i][1]
+        max_ = indexes[i + 1][1]
+        set_activity = list(set(df[(df.index >= min_) & (df.index <= max_) & (df['subject_id'] == subject)]['activity_code']))
         if len(set_activity) > 1:
-            return
+            raise Exception("Overlapping set activity")
         elif len(set_activity) == 0:
-            return
+            activities.append('NO')
         else:
             activities.append(set_activity[0])
 
-    set_activity = list(set(df[(df.index >= times[-1])]['activity_code']))
+    set_activity = list(set(df[(df.index >= indexes[-1][1]) & (df['subject_id'] == indexes[-1][0])]['activity_code']))
     if len(set_activity) > 1:
         print(set_activity)
         return
@@ -49,9 +50,18 @@ def _downsample_mean(data: pd.DataFrame,ds_rate: str = "5S") -> pd.DataFrame:
     :param ds_rate: downsample rate
     :return: dataframe of (M,d) where M < N
     """
-    data_down = data.resample(ds_rate).mean()
-    data_down = data_down.dropna()
+    print("Downsampling the data")
+    print("Current shape is")
+    print(data.shape)
+    data_down = data.groupby('subject_id').resample(ds_rate).mean().dropna()
+    data_down['subject'] = data_down.index.get_level_values(0)
     data_down['activity'] = assign_activity(data_down.index, data)
+    print("After")
+    print(data_down.shape)
+    data_down = data_down[data_down['activity'] != 'NO']
+    print("Dropped bad examples")
+    print(data_down.shape)
+
     del data
     return data_down
 

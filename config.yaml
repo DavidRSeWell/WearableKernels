@@ -8,8 +8,10 @@ DATA:
   load_phone:
     accel: false
     gyro: false
-  load_all: false
-  load_subjects: [1600]
+  load_all: true
+  load_subjects: [1600,1601]
+  #load_subjects: [1600,1601,1602,1603,1604,1605,1606,1607,1608,1609]
+  #load_subjects: [1605,1606,1607,1608,1609]
 
 TRANSFORM:
   features: [] # put features in order of desired application
